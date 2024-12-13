@@ -1,5 +1,5 @@
 <?php
-$serverName = "HAMMAM-LAP";
+$serverName = "WAPII";
 $database = "sistatip";
 $username = ""; 
 $password = ""; 

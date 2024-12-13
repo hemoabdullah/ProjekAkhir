@@ -73,13 +73,241 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 
 function populateEditForm(data) {
-    document.getElementById('edit-nim').value = data.nim;
-    document.getElementById('edit-nama-lengkap').value = data.nama_lengkap;
-    document.getElementById('edit-jenis-kelamin').value = data.jenis_kelamin;
-    document.getElementById('edit-no-hp').value = data.no_hp;
-    document.getElementById('edit-no-hp-ortu').value = data.no_hp_ortu;
-    document.getElementById('edit-email').value = data.email;
+    document.getElementById('edit-nim').value = data.nim || '';
+    document.getElementById('edit-nama-lengkap').value = data.nama_lengkap || '';
+    document.getElementById('edit-jenis-kelamin').value = data.jenis_kelamin || 'Laki-laki';
+    document.getElementById('edit-no-hp').value = data.no_hp || '';
+    document.getElementById('edit-no-hp-ortu').value = data.no_hp_ortu || '';
+    document.getElementById('edit-email').value = data.email || '';
 }
+function switchToEditProfile() {
+    fetch('../func/login.php', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: new URLSearchParams({
+            action: 'fetchProfile'
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (!data.error) {
+            populateEditForm(data);
+            document.querySelector('#v-pills-edit-profile-tab').click();
+        }
+    })
+    .catch(error => console.error("Error:", error));
+}
+
+// Add this to your existing script section
+document.addEventListener('DOMContentLoaded', function() {
+    const reportForm = document.querySelector('form[action="../func/report.php"]');
+    
+    reportForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const formData = new FormData(this);
+        
+        fetch('../func/report.php', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Report submitted successfully');
+                reportForm.reset();
+                // Switch to history tab
+                document.querySelector('#v-pills-history-tab').click();
+            } else {
+                alert('Error: ' + data.message);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('An error occurred while submitting the report');
+        });
+    });
+});
+
+document.getElementById('profile-photo').addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (file) {
+        // Validate file type
+        if (!file.type.startsWith('image/')) {
+            alert('Please upload an image file');
+            this.value = '';
+            return;
+        }
+        
+        // Validate file size (max 2MB)
+        if (file.size > 2 * 1024 * 1024) {
+            alert('File size must be less than 2MB');
+            this.value = '';
+            return;
+        }
+        
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            document.getElementById('preview-photo').src = e.target.result;
+        }
+        reader.readAsDataURL(file);
+    }
+});
+
+function refreshHistory() {
+    fetch('../func/get_history.php')
+    .then(response => response.json())
+    .then(data => {
+        const historyTable = document.querySelector('#history-diterima tbody');
+        historyTable.innerHTML = '';
+        
+        data.forEach(item => {
+            const row = `
+                <tr>
+                    <td>${item.id}</td>
+                    <td>${item.nama_pelanggaran}</td>
+                    <td>${item.bobot}</td>
+                    <td>${item.status}</td>
+                    <td><button class="btn btn-warning btn-sm" onclick="viewDetail(${item.id})">Check</button></td>
+                </tr>
+            `;
+            historyTable.insertAdjacentHTML('beforeend', row);
+        });
+    })
+    .catch(error => console.error('Error:', error));
+}
+document.querySelector('form[action="../func/report.php"]').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    const waktuInput = formData.get('waktu');
+    
+    // Format datetime to SQL Server compatible format
+    const date = new Date(waktuInput);
+    const formattedDate = date.toISOString().slice(0, 19).replace('T', ' ');
+    formData.set('waktu', formattedDate);
+    
+    fetch('../func/report.php', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Report submitted successfully');
+            this.reset();
+            document.querySelector('#v-pills-history-tab').click();
+        } else {
+            alert('Error: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('An error occurred while submitting the report');
+    });
+});
+
+function viewDetail(reportId) {
+    fetch(`../func/get_report_detail.php?id=${reportId}`)
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Switch to diajukan tab and populate data
+            document.querySelector('[data-bs-target="#history-diajukan"]').click();
+            
+            // Populate the detail view with the returned data
+            document.querySelector('#detail-bukti').src = '../uploads/evidence/' + data.bukti;
+            document.querySelector('#detail-nama').textContent = data.name;
+            document.querySelector('#detail-pelanggaran').textContent = data.nama_pelanggaran;
+            document.querySelector('#detail-waktu').textContent = new Date(data.waktu).toLocaleString();
+            document.querySelector('#detail-lokasi').textContent = data.lokasi;
+        } else {
+            alert('Error loading report details');
+        }
+    })
+    .catch(error => console.error('Error:', error));
+}
+
+function viewSubmittedDetail(reportId) {
+    fetch(`../func/get_submitted_report.php?id=${reportId}`)
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            document.querySelector('#detail-bukti').src = '../uploads/evidence/' + data.bukti;
+            document.querySelector('#detail-pelanggaran').textContent = data.nama_pelanggaran;
+            document.querySelector('#detail-waktu').textContent = new Date(data.waktu).toLocaleString('id-ID');
+            document.querySelector('#detail-lokasi').textContent = data.lokasi;
+            
+            new bootstrap.Modal(document.getElementById('detailModal')).show();
+        } else {
+            alert('Error loading report details');
+        }
+    })
+    .catch(error => console.error('Error:', error));
+}
+function viewReportDetail(reportId) {
+    fetch(`../func/get_report_details.php?id=${reportId}`)
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            document.querySelector('#modal-bukti').src = '../uploads/evidence/' + data.data.bukti;
+            document.querySelector('#modal-pelanggaran').textContent = data.data.nama_pelanggaran;
+            document.querySelector('#modal-waktu').textContent = new Date(data.data.waktu).toLocaleString('id-ID');
+            document.querySelector('#modal-lokasi').textContent = data.data.lokasi;
+            
+            new bootstrap.Modal(document.getElementById('reportDetailModal')).show();
+        } else {
+            alert('Error: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Failed to load report details');
+    });
+}
+document.getElementById('editProfileForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    
+    fetch('../func/update_profile.php', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Profile updated successfully');
+            document.querySelector('#v-pills-profile-tab').click();
+        } else {
+            alert('Error updating profile: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('An error occurred while updating profile');
+    });
+});
+
+
+document.querySelector('input[name="bukti"]').addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif'];
+    const maxSize = 5 * 1024 * 1024; // 5MB
+    
+    if (!allowedTypes.includes(file.type)) {
+        alert('Please upload an image file (JPEG, PNG, or GIF)');
+        this.value = '';
+        return;
+    }
+    
+    if (file.size > maxSize) {
+        alert('File size must be less than 5MB');
+        this.value = '';
+        return;
+    }
+});
 
 // Add this to your existing DOMContentLoaded event listener
 fetch('../func/login.php', {
@@ -132,6 +360,23 @@ document.getElementById('profile-photo').addEventListener('change', function(e) 
         </script>
 </head>
 <body>
+<!-- Success Modal -->
+<div class="modal fade" id="successModal" tabindex="-1" aria-labelledby="successModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="successModalLabel">Success</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        Report submitted successfully!
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <div
     class="container text-break"
@@ -212,7 +457,7 @@ document.getElementById('profile-photo').addEventListener('change', function(e) 
                     aria-label="Close"
                 ></button>
             </div>
-            <div class="modal-body">Are you soure you want to log out ?</div>
+            <div class="modal-body">Are you sure you want to log out?</div>
             <div class="modal-footer">
                   <form action="../index.php" method="POST">
                      <button type="submit" class="btn btn-danger">Yes</button>
@@ -232,7 +477,7 @@ document.getElementById('profile-photo').addEventListener('change', function(e) 
 </script>
 
 
-        <h2><span class="badge badge-rounded-top bg-info badge-lg">Mahasiswa</span></h2>
+        <h2><span class="badge badge-rounded-top bg-info badge-lg">Student</span></h2>
     <div class="row"> 
         <div class="col">
         <div class="d-flex">
@@ -289,32 +534,33 @@ document.getElementById('profile-photo').addEventListener('change', function(e) 
         $data = $stmt->fetch(PDO::FETCH_ASSOC);
     ?>
     
-    <h4 class="mb-3">Hai, <?php echo htmlspecialchars($userData['nama_lengkap']); ?>!</h4>
-    
+    <h4 class="mb-3">Hi, <?php echo htmlspecialchars($userData['nama_lengkap']); ?>!</h4>
+    <p>Welcome in Si Disiplin</p>
+
     <!-- Top Stats Cards -->
     <div class="d-flex gap-3 mb-4">
         <div class="card flex-fill text-center">
             <div class="card-body">
                 <h3 class="mb-0"><?php echo $data['total_ijin']; ?></h3>
-                <small>Total Izin</small>
+                <small>Total Permissions</small>
             </div>
         </div>
         <div class="card flex-fill text-center">
             <div class="card-body">
                 <h3 class="mb-0"><?php echo $data['total_laporan']; ?></h3>
-                <small>Total Laporan</small>
+                <small>Total Reports</small>
             </div>
         </div>
         <div class="card flex-fill text-center">
             <div class="card-body">
                 <h3 class="mb-0"><?php echo $data['total_laporan_ditolak']; ?></h3>
-                <small>Total Laporan Ditolak</small>
+                <small>Total Rejected Reports</small>
             </div>
         </div>
         <div class="card flex-fill text-center">
             <div class="card-body">
                 <h3 class="mb-0"><?php echo $data['total_sakit']; ?></h3>
-                <small>Total Sakit</small>
+                <small>Total Illness</small>
             </div>
         </div>
     </div>
@@ -322,7 +568,7 @@ document.getElementById('profile-photo').addEventListener('change', function(e) 
     <!-- Bottom Stats Card -->
     <div class="card bg-danger text-white">
         <div class="card-body">
-            <h5 class="card-title mb-4">Alpha Attendance Data, Permission, and Student Illness</h5>
+            <h5 class="card-title mb-4">Alpha, Permission, and Student Illness</h5>
             <div class="d-flex justify-content-between text-center">
                 <div>
                     <h4 class="mb-0"><?php echo $data['total_keterlambatan']; ?></h4>
@@ -357,41 +603,47 @@ document.getElementById('profile-photo').addEventListener('change', function(e) 
 <div class="tab-pane fade p-3 border rounded bg-light" id="v-pills-profile" role="tabpanel" aria-labelledby="v-pills-profile-tab">
     <div class="card">
         <div class="card-body">
-            <div class="text-center mb-4">
-            <img src="../img/profile-photo.jpg" class="rounded-3 mb-3" style="width: 150px; height: 200px; object-fit: cover;">
+        <div class="text-center mb-4">
+    <img src="<?php 
+        $user_id = $_SESSION['user_id'];
+        $stmt = $koneksi->prepare('SELECT pfp FROM mahasiswa WHERE id = ?');
+        $stmt->execute([$user_id]);
+        $result = $stmt->fetch();
+        echo $result['pfp'] ? '../uploads/profile/' . $result['pfp'] : '../img/profile-photo.jpg';
+    ?>" class="rounded-3 mb-3" style="width: 150px; height: 200px; object-fit: cover;" id="profile-image">
+</div>
 
-            </div>
             
 <div class="row mb-3">
     <div class="col-4">NIM</div>
     <div class="col-8" id="profile-nim"></div>
 </div>
 <div class="row mb-3">
-    <div class="col-4">Nama Lengkap</div>
+    <div class="col-4">Full Name</div>
     <div class="col-8" id="profile-nama-lengkap"></div>
 </div>
 <div class="row mb-3">
-    <div class="col-4">Jenis Kelamin</div>  
+    <div class="col-4">Gender</div>  
     <div class="col-8" id="profile-jenis-kelamin"></div>
 </div>
 <div class="row mb-3">
-    <div class="col-4">No. Handphone</div>
+    <div class="col-4">Handphone Number</div>
     <div class="col-8" id="profile-no-hp"></div>
 </div>
 <div class="row mb-3">
-    <div class="col-4">No. Handphone Orang Tua / Wali</div>
+    <div class="col-4">Parents Handphone</div>
     <div class="col-8" id="profile-no-hp-ortu"></div>
 </div>
 <div class="row mb-3">
-    <div class="col-4">Jurusan</div>
+    <div class="col-4">Major</div>
     <div class="col-8" id="profile-jurusan"></div>
 </div>
 <div class="row mb-3">
-    <div class="col-4">Prodi</div>
+    <div class="col-4">Study Program</div>
     <div class="col-8" id="profile-prodi"></div>
 </div>
 <div class="row mb-3">
-    <div class="col-4">Kelas</div>
+    <div class="col-4">Class</div>
     <div class="col-8" id="profile-kelas"></div>
 </div>
 <div class="row mb-3">
@@ -409,39 +661,44 @@ document.getElementById('profile-photo').addEventListener('change', function(e) 
     <div class="card">
         <div class="card-body">
             <h5 class="card-title mb-4">Edit Profile</h5>
-            <form id="editProfileForm" method="POST" action="../func/update_profile.php">
-                <div class="mb-3">
-                    <label class="form-label">NIM</label>
-                    <input type="text" class="form-control" name="nim" id="edit-nim" readonly>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">Nama Lengkap</label>
-                    <input type="text" class="form-control" name="nama_lengkap" id="edit-nama-lengkap" required>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">Jenis Kelamin</label>
-                    <select class="form-select" name="jenis_kelamin" id="edit-jenis-kelamin" required>
-                        <option value="Laki-laki">Laki-laki</option>
-                        <option value="Perempuan">Perempuan</option>
-                    </select>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">No. Handphone</label>
-                    <input type="tel" class="form-control" name="no_hp" id="edit-no-hp" required>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">No. Handphone Orang Tua / Wali</label>
-                    <input type="tel" class="form-control" name="no_hp_ortu" id="edit-no-hp-ortu">
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">Email</label>
-                    <input type="email" class="form-control" name="email" id="edit-email" required>
-                </div>
-                <div class="text-end">
-                    <button type="button" class="btn btn-secondary me-2" onclick="switchToProfile()">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Save Changes</button>
-                </div>
-            </form>
+<form id="editProfileForm" method="POST" action="../func/update_profile.php" enctype="multipart/form-data">
+    <div class="mb-3">
+        <label class="form-label">Profile Picture</label>
+        <input type="file" class="form-control" name="profile_photo" id="profile-photo" accept="image/*">
+    </div>
+    <div class="mb-3">
+        <label class="form-label">NIM</label>
+        <input type="text" class="form-control" name="nim" id="edit-nim">
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Full Name</label>
+        <input type="text" class="form-control" name="nama_lengkap" id="edit-nama-lengkap" required>
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Gender</label>
+        <select class="form-select" name="jenis_kelamin" id="edit-jenis-kelamin" readonly>
+            <option value="Laki-laki">Male</option>
+            <option value="Perempuan">Female</option>
+        </select>
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Handphone Number</label>
+        <input type="tel" class="form-control" name="no_hp" id="edit-no-hp" required>
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Parents Handphone Number</label>
+        <input type="tel" class="form-control" name="no_hp_ortu" id="edit-no-hp-ortu">
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Email</label>
+        <input type="email" class="form-control" name="email" id="edit-email" required>
+    </div>
+    <div class="text-end">
+        <button type="button" class="btn btn-secondary me-2" onclick="switchToProfile()">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save Changes</button>
+    </div>
+</form>
+
         </div>
     </div>
 </div>
@@ -449,8 +706,8 @@ document.getElementById('profile-photo').addEventListener('change', function(e) 
 
 <div class="tab-pane fade p-3 border rounded bg-light" id="v-pills-messages" role="tabpanel" aria-labelledby="v-pills-messages-tab">
     <div class="d-flex gap-2 mb-4">
-        <button class="btn btn-primary" onclick="showAllNotifications()">Semua</button>
-        <button class="btn btn-warning" onclick="showUnreadNotifications()">Belum Dibaca</button>
+        <button class="btn btn-primary" onclick="showAllNotifications()">All Notifications</button>
+        <button class="btn btn-warning" onclick="showUnreadNotifications()">Not Read yet</button>
     </div>
     
     <div class="notification-list">
@@ -475,7 +732,7 @@ document.getElementById('profile-photo').addEventListener('change', function(e) 
             }
             
             if ($stmt->rowCount() == 0) {
-                echo '<div class="alert alert-info">Tidak ada notifikasi</div>';
+                echo '<div class="alert alert-info">There is No notification</div>';
             }
             
         } catch (PDOException $e) {
@@ -488,52 +745,69 @@ document.getElementById('profile-photo').addEventListener('change', function(e) 
 <div class="tab-pane fade p-3 border rounded bg-light" id="v-pills-report" role="tabpanel" aria-labelledby="v-pills-report-tab">
     <div class="card">
         <div class="card-body">
-            <h5 class="card-title mb-4">Laporkan Pelanggaran!</h5>
-            
-            <form>
-                <div class="mb-3">
-                    <label class="form-label">Mahasiswa terlibat</label>
-                    <input type="text" class="form-control bg-light" placeholder="Masukkan nama mahasiswa">
-                </div>
-
-                <div class="mb-3">
-                    <label class="form-label">Bukti</label>
-                    <textarea class="form-control bg-light" rows="3" placeholder="Masukkan bukti yang menguatkan laporan"></textarea>
-                </div>
-
-                <div class="mb-3">
-    <label class="form-label">Nama pelanggaran</label>
-    <select class="form-select bg-light">
-        <option selected disabled>Pilih Pelanggaran</option>
-        <?php
-        // Populate the select options with data from the database
-        if ($result->num_rows > 0) {
-            while($row = $result->fetch_assoc()) {
-                echo "<option value='" . $row['id'] . "'>" . htmlspecialchars($row['violation_description']) . "</option>";
+            <h5 class="card-title mb-4">Report Violations!</h5>
+            <form method="POST" action="../func/report.php" enctype="multipart/form-data" id="reportForm">
+            <div class="mb-3">
+    <label class="form-label">Students involved</label>
+    <select name="name" class="form-select bg-light" required>
+        <option value="" selected disabled>Select students</option>
+        <?php 
+        try {
+            $stmt = $koneksi->prepare("SELECT id, nim, nama_lengkap FROM mahasiswa ORDER BY nama_lengkap ASC");
+            $stmt->execute();
+            while($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                echo "<option value='" . htmlspecialchars($row['nama_lengkap']) . "'>" . 
+                     htmlspecialchars($row['nim'] . " - " . $row['nama_lengkap']) . "</option>";
             }
-        } else {
-            echo "<option disabled>No violations found</option>";
+        } catch(PDOException $e) {
+            echo "<option disabled>Error loading students</option>";
         }
         ?>
     </select>
 </div>
-                <div class="mb-3">
-                    <label class="form-label">Waktu</label>
-                    <input type="text" class="form-control bg-light" placeholder="Masukkan waktu kejadian">
-                </div>
 
-                <div class="mb-3">
-                    <label class="form-label">Lokasi</label>
-                    <input type="text" class="form-control bg-light" placeholder="Masukkan lokasi kejadian">
-                </div>
+    <div class="mb-3">
+        <label class="form-label">Prove</label>
+        <input type="file" name="bukti" class="form-control bg-light" accept="image/*" required>
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Types of Violations</label>
+        <select name="nama_pelanggaran" class="form-select bg-light" required>
+            <option value="" selected disabled>Select violation</option>
+            <?php
+            try {
+                $stmt = $koneksi->prepare("SELECT violation_description, level FROM violation ORDER BY level ASC");
+                $stmt->execute();
+                while($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                    echo "<option value='" . htmlspecialchars($row['violation_description']) . "'>" . 
+                         htmlspecialchars("Level " . $row['level'] . " - " . $row['violation_description']) . "</option>";
+                }
+            } catch(PDOException $e) {
+                echo "<option disabled>Error loading violations</option>";
+            }
+            ?>
+        </select>
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Time</label>
+        <input type="datetime-local" name="waktu" class="form-control bg-light" required>
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Location</label>
+        <input type="text" name="lokasi" class="form-control bg-light" required>
+    </div>
+    <div class="text-end">
+        <button type="submit" class="btn btn-primary">Send!</button>
+    </div>
+</form>
 
-                <div class="text-end">
-                    <button type="submit" class="btn btn-primary">Kirim</button>
-                </div>
-            </form>
         </div>
     </div>
 </div>
+
+
+
+
 <div class="tab-pane fade p-3 border rounded bg-light" id="v-pills-history" role="tabpanel" aria-labelledby="v-pills-history-tab">
     <div class="nav nav-tabs mb-4" role="tablist">
         <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#history-diterima" type="button" role="tab">Diterima</button>
@@ -542,126 +816,193 @@ document.getElementById('profile-photo').addEventListener('change', function(e) 
 
     <div class="tab-content">
         <!-- Diterima tab -->
-        <div class="tab-pane fade show active" id="history-diterima" role="tabpanel">
-            <div class="table-responsive">
-                <h5>Laporan yang Diterima</h5>
-                <table class="table table-bordered">
-                    <thead>
-                        <tr>
-                            <th>No. Pelanggaran</th>
-                            <th>Nama Pelanggaran</th>
-                            <th>Bobot</th>
-                            <th>Status</th>
-                            <th>Detail</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td>ABC01</td>
-                            <td>Merokok</td>
-                            <td>IV</td>
-                            <td>Accepted</td>
-                            <td><button class="btn btn-warning btn-sm">Check</button></td>
-                        </tr>
+<div class="tab-pane fade show active" id="history-diterima" role="tabpanel">
+    <div class="table-responsive">
+        <h5>Reports Received</h5>
+        <table class="table table-bordered">
+            <thead>
                 <tr>
-                    <td>ABC02</td>
-                    <td>Merusak sarana prasarana</td>
-                    <td>II</td>
-                    <td>Accepted</td>
-                    <td><button class="btn btn-warning btn-sm">Check</button></td>
+                    <th>Violation Number</th>
+                    <th>Violation Name</th>
+                    <th>Weight</th>
+                    <th>Status</th>
+                    <th>Details</th>
                 </tr>
-                <tr>
-                    <td>ABC03</td>
-                    <td>Berkelahi</td>
-                    <td></td>
-                    <td>Pending</td>
-                    <td><button class="btn btn-warning btn-sm">Check</button></td>
-                </tr>
-                <tr>
-                    <td>ABC04</td>
-                    <td>Berkata Tidak Sopan</td>
-                    <td></td>
-                    <td>Pending</td>
-                    <td><button class="btn btn-warning btn-sm">Check</button></td>
-                </tr>
+            </thead>
+            <tbody>
+                <?php
+                try {
+                    $user_id = $_SESSION['user_id'];
+                    $query = "SELECT r.id, r.nama_pelanggaran, h.bobot, h.status 
+                             FROM report r 
+                             INNER JOIN history h ON h.fk_report = r.id 
+                             WHERE r.name = (SELECT nama_lengkap FROM mahasiswa WHERE id = :user_id)
+                             ORDER BY r.waktu DESC";
+                    
+                    $stmt = $koneksi->prepare($query);
+                    $stmt->bindParam(':user_id', $user_id);
+                    $stmt->execute();
+                    
+                    while($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                        echo "<tr>";
+                        echo "<td>VIO" . str_pad($row['id'], 3, '0', STR_PAD_LEFT) . "</td>";
+                        echo "<td>" . htmlspecialchars($row['nama_pelanggaran']) . "</td>";
+                        echo "<td>" . htmlspecialchars($row['bobot']) . "</td>";
+                        echo "<td>" . htmlspecialchars($row['status']) . "</td>";
+                        echo "<td><button class='btn btn-warning btn-sm' onclick='viewDetail(" . $row['id'] . ")'>Check</button></td>";
+                        echo "</tr>";
+                    }
+                    
+                    if ($stmt->rowCount() == 0) {
+                        echo "<tr><td colspan='5' class='text-center'>Tidak ada laporan yang diterima</td></tr>";
+                    }
+                } catch(PDOException $e) {
+                    echo "<tr><td colspan='5' class='text-danger'>Error: " . $e->getMessage() . "</td></tr>";
+                }
+                ?>
             </tbody>
         </table>
     </div>
 </div>
+
 <div class="tab-pane fade" id="history-diajukan" role="tabpanel">
-<div class="card">
-           <div class="card-body">
-             <div class="d-flex mb-3">
-                 <div class="flex-grow-1">
-                     <h6>Bukti</h6>
-                      <img src="path_to_image" class="img-fluid rounded" style="max-width: 200px;" alt="Bukti">
-                  </div>
-              </div>
-
-      <div class="mb-3">
-        <h6>Nama Mahasiswa terlapor</h6>
-        <p class="text-muted">Agus Kopling</p>
-      </div>
-
-      <div class="mb-3">
-        <h6>NIM Mahasiswa terlapor</h6>
-        <p class="text-muted">234171230412</p>
-      </div>
-
-      <div class="mb-3">
-        <h6>Tingkat dan Jenis pelanggaran</h6>
-        <p class="text-muted">IV - Merusak Sarana Prasarana</p>
-      </div>
-
-      <div class="mb-3">
-        <h6>Waktu</h6>
-        <p class="text-muted">Kamis, 14 November 2024 pukul 14:59</p>
-      </div>
-
-      <div class="mb-3">
-        <h6>Lokasi</h6>
-        <p class="text-muted">Di Ruang Kelas</p>
-      </div>
-
-      <div class="d-flex justify-content-end gap-2">
-        <button class="btn btn-secondary">Aju Banding</button>
-        <button class="btn btn-primary">Terima</button>
-      </div>
+    <div class="table-responsive">
+        <h5>Submitted Reports</h5>
+        <table class="table table-bordered">
+            <thead>
+                <tr>
+                    <th>Violation Number</th>
+                    <th>Violation Name</th>
+                    <th>Time</th>
+                    <th>Status</th>
+                    <th>Details</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php
+                try {
+                    $user_id = $_SESSION['user_id'];
+                    $query = "SELECT r.id, r.nama_pelanggaran, r.waktu, h.status 
+                             FROM report r 
+                             INNER JOIN history h ON h.fk_report = r.id 
+                             ORDER BY r.waktu DESC";
+                    
+                    $stmt = $koneksi->prepare($query);
+                    $stmt->execute();
+                    
+                    while($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                        echo "<tr>";
+                        echo "<td>VIO" . str_pad($row['id'], 3, '0', STR_PAD_LEFT) . "</td>";
+                        echo "<td>" . htmlspecialchars($row['nama_pelanggaran']) . "</td>";
+                        echo "<td>" . date('d/m/Y H:i', strtotime($row['waktu'])) . "</td>";
+                        echo "<td>" . htmlspecialchars($row['status']) . "</td>";
+                        echo "<td><button class='btn btn-warning btn-sm' onclick='viewReportDetail(" . $row['id'] . ")'>Check</button></td>";
+                        echo "</tr>";
+                    }
+                } catch(PDOException $e) {
+                    echo "<tr><td colspan='5' class='text-danger'>Error loading reports: " . $e->getMessage() . "</td></tr>";
+                }
+                ?>
+            </tbody>
+        </table>
     </div>
-  </div>
+
+    <!-- Detail Modal -->
+    <div class="modal fade" id="reportDetailModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Report Details</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <h6>Prove</h6>
+                        <img id="modal-bukti" class="img-fluid rounded" alt="Bukti">
+                    </div>
+                    <div class="mb-3">
+                        <h6>Voilation Name</h6>
+                        <p id="modal-pelanggaran" class="text-muted"></p>
+                    </div>
+                    <div class="mb-3">
+                        <h6>Time</h6>
+                        <p id="modal-waktu" class="text-muted"></p>
+                    </div>
+                    <div class="mb-3">
+                        <h6>Location</h6>
+                        <p id="modal-lokasi" class="text-muted"></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
+
+
     </div>
 </div>
 
 <div class="tab-pane fade p-3 border rounded bg-light" id="v-pills-punishment" role="tabpanel" aria-labelledby="v-pills-punishment-tab">
     <div class="table-responsive">
-        <h5>Laporan yang Diajukan</h5>
+        <h5>List of Penalties</h5>
         <table class="table table-bordered">
             <thead>
                 <tr>
-                    <th>No. Pelanggaran</th>
-                    <th>Nama Pelanggaran</th>
-                    <th>Hukuman</th>
+                    <th>Violation Number</th>
+                    <th>Violation Name</th>
+                    <th>Punishment</th>
                     <th>Status</th>
                 </tr>
             </thead>
             <tbody>
-                <tr>
-                    <td>ABC01</td>
-                    <td>Merokok</td>
-                    <td>Membersihkan taman</td>
-                    <td>Accepted</td>
-                </tr>
-                <tr>
-                    <td>ABC02</td>
-                    <td>Merusak sarana prasarana</td>
-                    <td>Mengganti barang yang sama</td>
-                    <td>Not Done</td>
-                </tr>
+                <?php
+                try {
+                    $user_id = $_SESSION['user_id'];
+                    
+                    // Get student's name first
+                    $nameQuery = "SELECT nama_lengkap FROM mahasiswa WHERE id = :user_id";
+                    $stmt = $koneksi->prepare($nameQuery);
+                    $stmt->bindParam(':user_id', $user_id);
+                    $stmt->execute();
+                    $studentData = $stmt->fetch(PDO::FETCH_ASSOC);
+                    
+                    // Then get their punishment records
+                    $query = "SELECT 
+                        r.id,
+                        r.nama_pelanggaran,
+                        h.hukuman,
+                        h.status
+                    FROM report r
+                    INNER JOIN history h ON h.fk_report = r.id 
+                    WHERE r.name = :student_name
+                    ORDER BY r.waktu DESC";
+                    
+                    $stmt = $koneksi->prepare($query);
+                    $stmt->bindParam(':student_name', $studentData['nama_lengkap']);
+                    $stmt->execute();
+                    
+                    while($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                        echo "<tr>";
+                        echo "<td>VIO" . str_pad($row['id'], 3, '0', STR_PAD_LEFT) . "</td>";
+                        echo "<td>" . htmlspecialchars($row['nama_pelanggaran']) . "</td>";
+                        echo "<td>" . htmlspecialchars($row['hukuman']) . "</td>";
+                        echo "<td>" . htmlspecialchars($row['status']) . "</td>";
+                        echo "</tr>";
+                    }
+                    
+                    if ($stmt->rowCount() == 0) {
+                        echo "<tr><td colspan='4' class='text-center'>Tidak ada hukuman yang tercatat</td></tr>";
+                    }
+                    
+                } catch(PDOException $e) {
+                    echo "<tr><td colspan='4' class='text-danger'>Error: " . $e->getMessage() . "</td></tr>";
+                }
+                ?>
             </tbody>
         </table>
     </div>
 </div>
+
 
 </div>
 

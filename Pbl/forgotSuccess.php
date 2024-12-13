@@ -16,12 +16,12 @@
     </nav>
 
     <div class="ms-5">
-        <h2><span class="badge badge-rounded-top bg-info badge-lg">Mahasiswa</span></h2>
+        <h2><span class="badge badge-rounded-top bg-info badge-lg">Student</span></h2>
     </div>
 
     <div class="d-block justify-content-center mt-5">
         <h2 class="text-center my-0"><strong>Welcome!</strong></h2>
-        <h3 class="text-center">Masukkan detail akun anda!</h3>
+        <h3 class="text-center">Enter your account details!</h3>
     </div>
 
     <div class="d-flex justify-content-center">
